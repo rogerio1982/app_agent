@@ -57,7 +57,14 @@ def executar_agente(tarefa):
         {
             "role": "system",
             "content": """
-            Gere apenas código Python executável, puro, sem nenhum comentário, explicação, instrução, texto adicional ou orientação sobre próximos passos. Não inclua comentários de código, nem linhas iniciadas com #, nem mensagens para o usuário. Apenas o código necessário para executar a tarefa solicitada.
+            Gere apenas código Python executável, puro, sem nenhum comentário, explicação, instrução,
+            texto adicional ou orientação sobre próximos passos. Não inclua comentários de código,
+            nem linhas iniciadas com #, nem mensagens para o usuário. Apenas o código necessário para 
+            executar a tarefa solicitada.
+            Se a tarefa exigir bibliotecas que não estejam instaladas por padrão, inclua
+            no início do código os comandos necessários para instalar dependências usando 
+            pip (por exemplo, via subprocess ou os.system), garantindo que o código funcione
+            mesmo que a dependência não esteja instalada.
             """
         },
         {"role": "user", "content": tarefa}
@@ -97,7 +104,7 @@ def executar_agente(tarefa):
 
         # Se deu erro, junta stderr e stdout para análise
         erro = f"STDERR:\n{erro_stderr}\n\nSTDOUT:\n{erro_stdout}" if erro_stderr or tem_erro_stdout else "Código executou mas não produziu resultado esperado."
-        #print("\n❌ Erro detectado:", erro)
+        print("\n❌ Erro detectado:", erro)
 
         mensagens.append({"role": "assistant", "content": codigo})
         mensagens.append({
