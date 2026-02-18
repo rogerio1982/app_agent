@@ -1,4 +1,6 @@
 import os
+import sys
+import json
 import subprocess
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -9,18 +11,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
-login = os.getenv("GMAIL_LOGIN")
-senha = os.getenv("GMAIL_PASSWORD")
 
 if not api_key:
     raise ValueError("OPENAI_API_KEY não encontrada.")
 
 client = OpenAI(api_key=api_key)
 
-SANDBOX_DIR = os.path.abspath("/sandbox_agent")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SANDBOX_DIR = os.path.join(BASE_DIR, "sandbox")
+MEMORY_PATH = os.path.join(BASE_DIR, "memory_store.json")
+
 MAX_ITERACOES = 5
 
 os.makedirs(SANDBOX_DIR, exist_ok=True)
+
+# =========================
+# CARREGAR MEMORY_STORE
+# =========================
+
+if os.path.exists(MEMORY_PATH):
+    with open(MEMORY_PATH, "r", encoding="utf-8") as f:
+        memory_store = json.load(f)
+else:
+    memory_store = []
 
 # =========================
 # FUNÇÕES DO AGENTE
@@ -35,51 +48,51 @@ def gerar_codigo(mensagens):
     return resposta.choices[0].message.content
 
 
-def executar_codigo(codigo):
-    caminho = os.path.join(SANDBOX_DIR, "execucao.py")
+def salvar_memoria():
+    with open(MEMORY_PATH, "w", encoding="utf-8") as f:
+        json.dump(memory_store, f, indent=2, ensure_ascii=False)
 
-    with open(caminho, "w", encoding="utf-8") as f:
+
+def executar_codigo(codigo):
+    caminho_script = os.path.join(BASE_DIR, "execucao.py")
+
+    with open(caminho_script, "w", encoding="utf-8") as f:
         f.write(codigo)
 
-    # Executa o código Python
     resultado = subprocess.run(
-        ["python", caminho],
+        [sys.executable, caminho_script],
         capture_output=True,
         text=True,
-        cwd=os.path.dirname(os.path.abspath(__file__))
+        cwd=SANDBOX_DIR
     )
-    
+
     return resultado
 
 
 def executar_agente(tarefa):
-    mensagens = [
-        {
+    global memory_store
+
+    # Garante que existe system prompt
+    if not memory_store:
+        memory_store.append({
             "role": "system",
             "content": """
-            Gere apenas código Python executável, puro, sem nenhum comentário, explicação, instrução,
-            texto adicional ou orientação sobre próximos passos. Não inclua comentários de código,
-            nem linhas iniciadas com #, nem mensagens para o usuário. Apenas o código necessário para 
-            executar a tarefa solicitada.
-            Se a tarefa exigir bibliotecas que não estejam instaladas por padrão, inclua
-            no início do código os comandos necessários para instalar dependências usando 
-            pip (por exemplo, via subprocess ou os.system), garantindo que o código funcione
-            mesmo que a dependência não esteja instalada.
+            Gere apenas código Python executável, puro, sem comentários ou explicações.
+            Trabalhe apenas dentro da pasta sandbox.
+            Não utilize caminhos absolutos.
             """
-        },
-        {"role": "user", "content": tarefa}
-    ]
+        })
+
+    # Adiciona nova tarefa
+    memory_store.append({"role": "user", "content": tarefa})
 
     tentativa = 1
 
-    
     while tentativa <= MAX_ITERACOES:
         print(f"\n🔄 Tentativa {tentativa} de {MAX_ITERACOES}...")
 
-        # Gera código
-        codigo = gerar_codigo(mensagens)
+        codigo = gerar_codigo(memory_store)
 
-        # Limpa Markdown se houver
         codigo = codigo.strip()
         if codigo.startswith("```") and codigo.endswith("```"):
             codigo = "\n".join(codigo.split("\n")[1:-1])
@@ -87,34 +100,48 @@ def executar_agente(tarefa):
         print("\n💻 Código gerado pelo agente:")
         print(codigo)
 
-        # Executa o código
         resultado = executar_codigo(codigo)
 
-        # Verifica se houve erro (stderr ou returncode != 0)
         erro_stderr = resultado.stderr.strip()
         erro_stdout = resultado.stdout.strip()
-        
-        # Detecta se há mensagem de erro no stdout também
-        tem_erro_stdout = any(keyword in erro_stdout.lower() for keyword in ["erro", "error", "exception", "traceback", "failed", "falha"])
-        
-        # Se sucesso (sem erros e returncode 0), retorna
+
+        tem_erro_stdout = any(
+            keyword in erro_stdout.lower()
+            for keyword in ["erro", "error", "exception", "traceback", "failed", "falha"]
+        )
+
+        # Sucesso
         if resultado.returncode == 0 and not erro_stderr and not tem_erro_stdout:
             print("\n✅ Execução bem-sucedida!")
-            return resultado.stdout if resultado.stdout else "Tarefa executada com sucesso."
 
-        # Se deu erro, junta stderr e stdout para análise
-        erro = f"STDERR:\n{erro_stderr}\n\nSTDOUT:\n{erro_stdout}" if erro_stderr or tem_erro_stdout else "Código executou mas não produziu resultado esperado."
+            memory_store.append({"role": "assistant", "content": codigo})
+
+            if erro_stdout:
+                memory_store.append({
+                    "role": "system",
+                    "content": f"Resultado da execução:\n{erro_stdout}"
+                })
+
+            salvar_memoria()
+
+            return erro_stdout if erro_stdout else "Tarefa executada com sucesso."
+
+        # Erro detectado
+        erro = f"STDERR:\n{erro_stderr}\n\nSTDOUT:\n{erro_stdout}"
         print("\n❌ Erro detectado:", erro)
 
-        mensagens.append({"role": "assistant", "content": codigo})
-        mensagens.append({
+        memory_store.append({"role": "assistant", "content": codigo})
+        memory_store.append({
             "role": "user",
             "content": f"O código anterior deu o seguinte erro:\n{erro}\nPor favor, gere um novo código Python que funcione."
         })
 
+        salvar_memoria()
+
         tentativa += 1
         print(f"🔄 Tentando novamente... (tentativa {tentativa}/{MAX_ITERACOES})\n")
 
+    salvar_memoria()
     return "⚠️ Falha após várias tentativas."
 
 

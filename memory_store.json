@@ -1,0 +1,50 @@
+[
+  {
+    "role": "system",
+    "content": "\n            Gere apenas código Python executável, puro, sem comentários ou explicações.\n            Trabalhe apenas dentro da pasta sandbox.\n            Não utilize caminhos absolutos.\n            "
+  },
+  {
+    "role": "user",
+    "content": "criar nat.txt"
+  },
+  {
+    "role": "assistant",
+    "content": "with open('nat.txt', 'w') as f:\n    f.write('') "
+  },
+  {
+    "role": "user",
+    "content": "liste o diretorio"
+  },
+  {
+    "role": "assistant",
+    "content": "import os\n\nprint(os.listdir())"
+  },
+  {
+    "role": "system",
+    "content": "Resultado da execução:\n['henr.txt', 'nat.txt', 'rogerio', 'rogerio.txt', 'tavo.mp4', 'tavo.txt']"
+  },
+  {
+    "role": "user",
+    "content": "qual pasta voce esta?"
+  },
+  {
+    "role": "assistant",
+    "content": "import os\n\nprint(os.getcwd())"
+  },
+  {
+    "role": "system",
+    "content": "Resultado da execução:\nc:\\Users\\roger\\Desktop\\aws\\app_agent\\sandbox"
+  },
+  {
+    "role": "user",
+    "content": "qual dieretorio voce esta?"
+  },
+  {
+    "role": "assistant",
+    "content": "import os\n\nprint(os.path.dirname(os.getcwd()))"
+  },
+  {
+    "role": "system",
+    "content": "Resultado da execução:\nc:\\Users\\roger\\Desktop\\aws\\app_agent"
+  }
+]
